@@ -1,0 +1,19 @@
+[
+    {
+      "id": 1,
+      "label": "File",
+      "submenu": [
+        { "id": 1, "label": "New" },
+        { "id": 2, "label": "Open" },
+        { "id": 3, "label": "Save" }
+      ]
+    },
+    {
+      "id": 2,
+      "label": "Edit",
+      "submenu": [
+        { "id": 1, "label": "Undo" },
+        { "id": 2, "label": "Redo" }
+      ]
+    }
+  ]
