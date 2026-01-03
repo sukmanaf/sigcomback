@@ -77,8 +77,8 @@ export async function GET(
       headers: {
         'Content-Type': 'application/x-protobuf',
         'Access-Control-Allow-Origin': '*',
-        // Cache tiles for 5 minutes to speed up repeated loads
-        'Cache-Control': 'public, max-age=300, stale-while-revalidate=60',
+        // Cache tiles for 1 hour to speed up repeated loads
+        'Cache-Control': 'public, max-age=3600, stale-while-revalidate=300',
       },
     });
   } catch (error: any) {
