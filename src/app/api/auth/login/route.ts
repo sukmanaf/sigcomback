@@ -65,7 +65,12 @@ export async function POST(request: NextRequest) {
     } catch (error: any) {
         console.error('Login error:', error);
         return NextResponse.json(
-            { success: false, message: 'Terjadi kesalahan saat login' },
+            {
+                success: false,
+                message: 'Terjadi kesalahan saat login',
+                error: error?.message || String(error),
+                stack: process.env.NODE_ENV === 'development' ? error?.stack : undefined
+            },
             { status: 500 }
         );
     }
