@@ -180,16 +180,12 @@ export default function Navbar({
 
                   {tematikOpen && isDesaSelected && (
                     <div className="absolute top-full left-0 mt-2 w-56 bg-slate-800 rounded-xl shadow-2xl border border-slate-700 overflow-hidden z-[1001]">
-                      <div
-                        className="py-2 overflow-y-auto"
-                        style={{ maxHeight: isLandscape ? '200px' : '400px' }}
-                      >
+                      <div className="py-2">
                         {tematikItems.map((item) => (
                           <button
                             key={item.id}
                             onClick={() => handleTematikClick(item.id)}
-                            className="w-full text-left px-4 text-sm transition-colors flex items-center gap-3 text-gray-300 hover:bg-slate-700 hover:text-white"
-                            style={{ paddingTop: isLandscape ? '6px' : '10px', paddingBottom: isLandscape ? '6px' : '10px' }}
+                            className="w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center gap-3 text-gray-300 hover:bg-slate-700 hover:text-white"
                           >
                             {item.name}
                           </button>

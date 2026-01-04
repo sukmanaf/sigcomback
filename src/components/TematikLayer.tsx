@@ -10,6 +10,7 @@ interface TematikLayerProps {
     tematik: string;
     visible: boolean;
     onCategoriesChange?: (categories: string[]) => void;
+    onNopClick?: (nop: string, category: string) => void;
 }
 
 // Color palette for jenis tanah categories
@@ -52,28 +53,129 @@ const jenisBangunanColors: Record<string, string> = {
     'default': '#FFFFFF',               // WHITE (putih)
 };
 
-// Generate dynamic color from string (for kelas tanah codes like 041, 064, etc.)
-// Uses golden ratio angle for better color distribution
-// Colors are bright and vivid to be visible on dark satellite basemap
-function stringToColor(str: string): string {
-    // Create a more varied hash using multiple character combinations
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-        // Use a prime multiplier for more variation
-        hash = ((hash * 31) + str.charCodeAt(i)) | 0;
+// 100 unique, maximally distinct colors for dynamic coloring
+// Each color has different hue - no similar colors included
+// Shuffled so adjacent colors have maximum visual contrast
+const UNIQUE_COLOR_PALETTE: string[] = [
+    // Row 1: Red, Cyan, Brown, Lime, Magenta, Navy
+    '#FF0000', '#00CED1', '#8B4513', '#32CD32', '#FF00FF', '#000080',
+    // Row 2: Gold, Purple, Teal, Orange, Pink, Olive
+    '#FFD700', '#800080', '#008080', '#FF8C00', '#FF1493', '#808000',
+    // Row 3: Aqua, Maroon, Chartreuse, Indigo, Coral, DarkCyan
+    '#00FFFF', '#800000', '#7FFF00', '#4B0082', '#FF7F50', '#008B8B',
+    // Row 4: Yellow, DarkViolet, SeaGreen, Crimson, DeepSkyBlue, Sienna
+    '#FFFF00', '#9400D3', '#2E8B57', '#DC143C', '#00BFFF', '#A0522D',
+    // Row 5: Blue, Tomato, MediumSpringGreen, DarkOrange, SlateBlue, Peru
+    '#0000FF', '#FF6347', '#00FA9A', '#FF4500', '#6A5ACD', '#CD853F',
+    // Row 6: Lime, MediumVioletRed, DarkSlateGray, Goldenrod, RoyalBlue, SaddleBrown
+    '#00FF00', '#C71585', '#2F4F4F', '#DAA520', '#4169E1', '#8B4513',
+    // Row 7: Magenta, DarkGreen, LightCoral, DodgerBlue, Khaki, DarkMagenta
+    '#FF00FF', '#006400', '#F08080', '#1E90FF', '#F0E68C', '#8B008B',
+    // Row 8: SpringGreen, Firebrick, CadetBlue, OrangeRed, MediumOrchid, DarkOliveGreen
+    '#00FF7F', '#B22222', '#5F9EA0', '#FF4500', '#BA55D3', '#556B2F',
+    // Row 9: Cyan, Brown, LawnGreen, BlueViolet, Salmon, DarkSeaGreen
+    '#00FFFF', '#A52A2A', '#7CFC00', '#8A2BE2', '#FA8072', '#8FBC8F',
+    // Row 10: HotPink, DarkSlateBlue, LightGreen, Indian Red, SteelBlue, Tan
+    '#FF69B4', '#483D8B', '#90EE90', '#CD5C5C', '#4682B4', '#D2B48C',
+    // Row 11: Aquamarine, DarkRed, MediumSeaGreen, DarkOrange, MediumPurple, RosyBrown
+    '#7FFFD4', '#8B0000', '#3CB371', '#FF8C00', '#9370DB', '#BC8F8F',
+    // Row 12: Turquoise, Chocolate, YellowGreen, Orchid, LightSeaGreen, DarkGoldenrod
+    '#40E0D0', '#D2691E', '#9ACD32', '#DA70D6', '#20B2AA', '#B8860B',
+    // Row 13: PaleVioletRed, MediumTurquoise, OliveDrab, Plum, LightSteelBlue, BurlyWood
+    '#DB7093', '#48D1CC', '#6B8E23', '#DDA0DD', '#B0C4DE', '#DEB887',
+    // Row 14: GreenYellow, MediumSlateBlue, DarkKhaki, Thistle, CornflowerBlue, NavajoWhite
+    '#ADFF2F', '#7B68EE', '#BDB76B', '#D8BFD8', '#6495ED', '#FFDEAD',
+    // Row 15: PaleTurquoise, Violet, MediumAquamarine, LightPink, PowderBlue, Wheat
+    '#AFEEEE', '#EE82EE', '#66CDAA', '#FFB6C1', '#B0E0E6', '#F5DEB3',
+    // Row 16: Remaining distinct colors
+    '#E6E6FA', '#7B68EE', '#00CED1', '#FFE4B5', '#87CEEB', '#DDA0DD',
+    '#98FB98', '#F0E68C', '#87CEFA', '#FAFAD2',
+];
+
+// Cache to track assigned colors per tematik type to avoid duplicates
+const categoryColorCache: Map<string, Map<string, string>> = new Map();
+// Track used colors per tematik to ensure uniqueness
+const usedColorsCache: Map<string, Set<string>> = new Map();
+
+// Get or assign a unique color for a category within a tematik type
+function getOrAssignUniqueColor(category: string, tematikType: string): string {
+    // Initialize caches for this tematik type if needed
+    if (!categoryColorCache.has(tematikType)) {
+        categoryColorCache.set(tematikType, new Map());
+        usedColorsCache.set(tematikType, new Set());
     }
 
-    // Use golden ratio angle (137.5°) for better hue distribution
-    // This ensures adjacent codes get very different colors
-    const goldenAngle = 137.508;
-    const hue = (Math.abs(hash) * goldenAngle) % 360;
+    const tematikCache = categoryColorCache.get(tematikType)!;
+    const usedColors = usedColorsCache.get(tematikType)!;
 
-    // Use bright, vivid colors (high saturation and higher lightness)
-    // Visible on dark satellite basemap
-    const saturation = 80 + (Math.abs(hash >> 4) % 20); // 80-100% saturation for vivid colors
-    const lightness = 55 + (Math.abs(hash >> 8) % 20); // 55-75% lightness for bright colors
+    // Return cached color if already assigned
+    if (tematikCache.has(category)) {
+        return tematikCache.get(category)!;
+    }
 
-    return `hsl(${Math.round(hue)}, ${saturation}%, ${lightness}%)`;
+    // Find next available color from palette
+    let assignedColor: string | null = null;
+
+    // First, try to find an unused color from the palette
+    for (const color of UNIQUE_COLOR_PALETTE) {
+        if (!usedColors.has(color)) {
+            assignedColor = color;
+            break;
+        }
+    }
+
+    // If all palette colors are used, generate additional HSL colors
+    if (!assignedColor) {
+        // Generate more colors using golden ratio for even distribution
+        const goldenAngle = 137.508;
+        let colorIndex = usedColors.size;
+        let attempts = 0;
+        const maxAttempts = 1000;
+
+        while (!assignedColor && attempts < maxAttempts) {
+            const hue = (colorIndex * goldenAngle) % 360;
+            // Vary saturation and lightness for more variety
+            const satVariation = (colorIndex % 3);
+            const saturation = 70 + satVariation * 10; // 70%, 80%, 90%
+            const lightVariation = Math.floor(colorIndex / 3) % 4;
+            const lightness = 45 + lightVariation * 10; // 45%, 55%, 65%, 75%
+
+            const newColor = `hsl(${Math.round(hue)}, ${saturation}%, ${lightness}%)`;
+
+            if (!usedColors.has(newColor)) {
+                assignedColor = newColor;
+            }
+            colorIndex++;
+            attempts++;
+        }
+
+        // Fallback if somehow still no color (should never happen)
+        if (!assignedColor) {
+            assignedColor = `hsl(${Math.random() * 360}, 85%, 60%)`;
+        }
+    }
+
+    // Cache the assignment
+    tematikCache.set(category, assignedColor);
+    usedColors.add(assignedColor);
+
+    return assignedColor;
+}
+
+// Legacy function for backward compatibility - now uses unique color system
+function stringToColor(str: string, tematikType: string = 'default'): string {
+    return getOrAssignUniqueColor(str, tematikType);
+}
+
+// Clear color cache for a specific tematik type (call when switching layers)
+export function clearTematikColorCache(tematikType?: string) {
+    if (tematikType) {
+        categoryColorCache.delete(tematikType);
+        usedColorsCache.delete(tematikType);
+    } else {
+        categoryColorCache.clear();
+        usedColorsCache.clear();
+    }
 }
 
 // Color palette for nilai individu categories
@@ -134,7 +236,8 @@ export function getCategoryColor(category: string, tematik?: string): string {
         return statusPembayaranColors[category] || statusPembayaranColors['default'];
     }
     // For kelas_tanah, kelas_bangunan, zona_nilai_tanah and other codes, generate color from string
-    return stringToColor(category);
+    // Pass tematik type to ensure unique colors per layer type
+    return stringToColor(category, tematik || 'default');
 }
 
 interface TematikData {
@@ -147,7 +250,7 @@ const requiresYear = ['kelas_tanah', 'kelas_bangunan', 'zona_nilai_tanah', 'stat
 // Opacity for fill (used in both polygon and legend)
 export const TEMATIK_FILL_OPACITY = 0.35;
 
-export default function TematikLayer({ desaKode, tematik, visible, onCategoriesChange }: TematikLayerProps) {
+export default function TematikLayer({ desaKode, tematik, visible, onCategoriesChange, onNopClick }: TematikLayerProps) {
     const map = useMap();
     const [data, setData] = useState<TematikData | null>(null);
     const [loading, setLoading] = useState(false);
@@ -170,8 +273,12 @@ export default function TematikLayer({ desaKode, tematik, visible, onCategoriesC
     // Check if this tematik type needs year selection
     const needsYear = requiresYear.includes(tematik);
 
-    // Cleanup function for tematik layers only
+    // Cleanup function for tematik layers only - more robust version
     const cleanupLayers = useCallback(() => {
+        // Clear color cache for this tematik type to allow fresh color assignment
+        clearTematikColorCache(tematik);
+
+        // First, clean tracked layers
         geojsonLayersRef.current.forEach(layer => {
             if ((layer as any)._labelMarker && map.hasLayer((layer as any)._labelMarker)) {
                 map.removeLayer((layer as any)._labelMarker);
@@ -181,27 +288,35 @@ export default function TematikLayer({ desaKode, tematik, visible, onCategoriesC
             }
         });
         geojsonLayersRef.current = [];
-        setData(null);
-    }, [map]);
 
-    // Clear ALL GeoJSON/vector layers from the map (except base tile layer)
-    const clearAllMapLayers = useCallback(() => {
-        map.eachLayer((layer: L.Layer) => {
-            // Keep TileLayer (basemap), remove all other layers
-            if (!(layer instanceof L.TileLayer)) {
+        // Also scan and remove any stray tematik GeoJSON layers (safety net)
+        // This catches any layers that weren't properly tracked
+        map.eachLayer((layer: any) => {
+            // Check if it's a GeoJSON layer (has feature property) but NOT a TileLayer
+            if (layer.feature && !(layer instanceof L.TileLayer)) {
                 map.removeLayer(layer);
             }
+            // Also check for layers that have _layers (GeoJSON group)
+            if (layer._layers && !(layer instanceof L.TileLayer)) {
+                const hasGeoJsonFeatures = Object.values(layer._layers).some(
+                    (l: any) => l.feature
+                );
+                if (hasGeoJsonFeatures) {
+                    map.removeLayer(layer);
+                }
+            }
         });
-        geojsonLayersRef.current = [];
-    }, [map]);
+
+        setData(null);
+    }, [map, tematik]);
 
     // Fetch data function
     const fetchTematikData = useCallback(async (tahun?: string) => {
         setLoading(true);
         setError(null);
 
-        // Clear all existing layers from map first
-        clearAllMapLayers();
+        // Clear existing tematik layers only (not all map layers!)
+        cleanupLayers();
 
         try {
             // Fetch tematik data from SISMIOP via dynamic route
@@ -273,12 +388,12 @@ export default function TematikLayer({ desaKode, tematik, visible, onCategoriesC
                     },
                 });
 
-                layer.bindPopup(`
-                    <div>
-                        <strong>NOP:</strong> ${nop}<br/>
-                        <strong>Kategori:</strong> ${category}
-                    </div>
-                `);
+                // Click handler to open NOP info modal with category info
+                layer.on('click', () => {
+                    if (onNopClick) {
+                        onNopClick(nop, category);
+                    }
+                });
 
                 layer.addTo(map);
                 newLayers.push(layer);
@@ -292,12 +407,16 @@ export default function TematikLayer({ desaKode, tematik, visible, onCategoriesC
         } finally {
             setLoading(false);
         }
-    }, [desaKode, tematik, map, cleanupLayers, clearAllMapLayers]);
+    }, [desaKode, tematik, map, cleanupLayers, onNopClick]);
 
     // Handle visibility and initial fetch
     useEffect(() => {
+        // ALWAYS cleanup previous layers first when this effect runs
+        // This ensures old tematik layers are removed before showing new ones
+        cleanupLayers();
+
+        // Exit early if not visible or missing required data
         if (!visible || !desaKode || !tematik) {
-            cleanupLayers();
             setShowYearPopup(false);
             setSelectedYear('');
             return;
@@ -325,6 +444,8 @@ export default function TematikLayer({ desaKode, tematik, visible, onCategoriesC
     const handleYearSelect = (year: string) => {
         setSelectedYear(year);
         setShowYearPopup(false);
+        // Always cleanup before fetching new data
+        cleanupLayers();
         fetchTematikData(year);
     };
 

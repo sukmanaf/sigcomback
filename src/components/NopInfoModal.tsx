@@ -10,6 +10,7 @@ interface NopInfoModalProps {
     nop: string;
     userRole?: string;
     userId?: number;
+    tematikCategory?: string;
 }
 
 interface ObjekPajak {
@@ -72,7 +73,7 @@ const STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; colo
     ditolak: { label: 'Ditolak', icon: <XCircle size={14} />, color: 'bg-red-500/20 text-red-400 border-red-500/30' },
 };
 
-export default function NopInfoModal({ isOpen, onClose, nop, userRole, userId }: NopInfoModalProps) {
+export default function NopInfoModal({ isOpen, onClose, nop, userRole, userId, tematikCategory }: NopInfoModalProps) {
     const [activeTab, setActiveTab] = useState<'objek' | 'bangunan' | 'usulan'>('objek');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -234,6 +235,7 @@ export default function NopInfoModal({ isOpen, onClose, nop, userRole, userId }:
                         <div>
                             <h2 className="text-xl font-bold">Informasi Objek Pajak</h2>
                             <p className="text-emerald-100 text-sm font-mono">{nop}</p>
+
                         </div>
                     </div>
                     <button onClick={onClose} className="hover:bg-white/20 p-2 rounded-xl transition-colors">
@@ -301,6 +303,14 @@ export default function NopInfoModal({ isOpen, onClose, nop, userRole, userId }:
                             {/* Tab: Objek Pajak */}
                             {activeTab === 'objek' && (
                                 <div className="space-y-4">
+                                    {/* Tematik Category - shown above Tahun Pajak if available */}
+                                    {tematikCategory && (
+                                        <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3">
+                                            <p className="text-xs text-emerald-600 mb-1">Kategori Tematik</p>
+                                            <p className="text-sm font-semibold text-emerald-900">{tematikCategory}</p>
+                                        </div>
+                                    )}
+
                                     {/* Year Dropdown */}
                                     <div>
                                         <label className="block text-sm font-medium text-gray-600 mb-2">Tahun Pajak</label>
@@ -318,7 +328,7 @@ export default function NopInfoModal({ isOpen, onClose, nop, userRole, userId }:
                                     </div>
 
                                     {selectedObjek && (
-                                        <div className="grid grid-cols-4 gap-3">
+                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                                             <InfoCard label="Wajib Pajak" value={selectedObjek.WAJIB_PAJAK} span={2} />
                                             <InfoCard label="Status" value={selectedObjek.STATUS} span={2} />
                                             <InfoCard label="Letak OP" value={selectedObjek.LETAK_OP} span={4} />
@@ -358,7 +368,7 @@ export default function NopInfoModal({ isOpen, onClose, nop, userRole, userId }:
                                             </div>
 
                                             {selectedBangunanData && (
-                                                <div className="grid grid-cols-2 gap-3">
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                                     <InfoCard label="Penggunaan" value={selectedBangunanData.PENGGUNAAN_BANGUNAN} span={2} />
                                                     <InfoCard label="Luas Bangunan" value={selectedBangunanData.LUAS_BANGUNAN} />
                                                     <InfoCard label="Jumlah Lantai" value={selectedBangunanData.JUMLAH_LANTAI} />
@@ -560,8 +570,10 @@ export default function NopInfoModal({ isOpen, onClose, nop, userRole, userId }:
 
 // Helper component for info cards
 function InfoCard({ label, value, span = 1, highlight = false }: { label: string; value: string; span?: number; highlight?: boolean }) {
+    // On mobile always full width, on md+ use span
+    const spanClass = span === 2 ? 'md:col-span-2' : span === 4 ? 'md:col-span-4' : '';
     return (
-        <div className={`${span === 2 ? 'col-span-2' : span === 4 ? 'col-span-4' : ''} ${highlight ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'} rounded-lg p-3 border`}>
+        <div className={`${spanClass} ${highlight ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'} rounded-lg p-3 border`}>
             <p className={`text-xs ${highlight ? 'text-emerald-600' : 'text-gray-500'} mb-1`}>{label}</p>
             <p className={`text-sm font-semibold ${highlight ? 'text-emerald-900' : 'text-gray-900'}`}>{value || '-'}</p>
         </div>

@@ -18,51 +18,102 @@ export async function GET(
     const tolerance = zoom >= 18 ? 0 : Math.pow(2, 18 - zoom) * 0.00001;
     const simplifyTolerance = tolerance > 0 ? tolerance * 111320 : 0;
 
-    // Build query using Drizzle sql template
-    const result = desaKode
-      ? await db.execute(sql`
-          SELECT ST_AsMVT(q, 'nops', 4096, 'geom') as mvt
-          FROM (
-            SELECT 
-              id, 
-              d_nop, 
-              d_luas, 
-              SUBSTRING(d_nop FROM 14 FOR 4) as view_nop,
-              ST_AsMVTGeom(
-                ST_SimplifyPreserveTopology(ST_Transform(geom, 3857), ${simplifyTolerance}),
-                ST_TileEnvelope(${zoom}, ${tileX}, ${tileY}),
-                4096, 64, true
-              ) as geom
-            FROM nops
-            WHERE ST_Intersects(
-              ST_Transform(geom, 3857),
-              ST_TileEnvelope(${zoom}, ${tileX}, ${tileY})
-            )
-            AND left(d_nop, 10) = ${desaKode}
-          ) q
-          WHERE geom IS NOT NULL
-        `)
-      : await db.execute(sql`
-          SELECT ST_AsMVT(q, 'nops', 4096, 'geom') as mvt
-          FROM (
-            SELECT 
-              id, 
-              d_nop, 
-              d_luas, 
-              SUBSTRING(d_nop FROM 14 FOR 4) as view_nop,
-              ST_AsMVTGeom(
-                ST_SimplifyPreserveTopology(ST_Transform(geom, 3857), ${simplifyTolerance}),
-                ST_TileEnvelope(${zoom}, ${tileX}, ${tileY}),
-                4096, 64, true
-              ) as geom
-            FROM nops
-            WHERE ST_Intersects(
-              ST_Transform(geom, 3857),
-              ST_TileEnvelope(${zoom}, ${tileX}, ${tileY})
-            )
-          ) q
-          WHERE geom IS NOT NULL
-        `);
+    // Try using view first, fallback to direct table query if view doesn't exist
+    let result;
+    try {
+      // Query using nops_mvt view (pre-transformed geometry)
+      result = desaKode
+        ? await db.execute(sql`
+            SELECT ST_AsMVT(q, 'nops', 4096, 'geom') as mvt
+            FROM (
+              SELECT 
+                id, 
+                d_nop, 
+                d_luas, 
+                view_nop,
+                ST_AsMVTGeom(
+                  CASE WHEN ${simplifyTolerance} > 0 
+                    THEN ST_SimplifyPreserveTopology(geom_3857, ${simplifyTolerance})
+                    ELSE geom_3857
+                  END,
+                  ST_TileEnvelope(${zoom}, ${tileX}, ${tileY}),
+                  4096, 64, true
+                ) as geom
+              FROM nops_mvt
+              WHERE geom_3857 && ST_TileEnvelope(${zoom}, ${tileX}, ${tileY})
+              AND desa_kode = ${desaKode}
+            ) q
+            WHERE geom IS NOT NULL
+          `)
+        : await db.execute(sql`
+            SELECT ST_AsMVT(q, 'nops', 4096, 'geom') as mvt
+            FROM (
+              SELECT 
+                id, 
+                d_nop, 
+                d_luas, 
+                view_nop,
+                ST_AsMVTGeom(
+                  CASE WHEN ${simplifyTolerance} > 0 
+                    THEN ST_SimplifyPreserveTopology(geom_3857, ${simplifyTolerance})
+                    ELSE geom_3857
+                  END,
+                  ST_TileEnvelope(${zoom}, ${tileX}, ${tileY}),
+                  4096, 64, true
+                ) as geom
+              FROM nops_mvt
+              WHERE geom_3857 && ST_TileEnvelope(${zoom}, ${tileX}, ${tileY})
+            ) q
+            WHERE geom IS NOT NULL
+          `);
+    } catch (viewError: any) {
+      // Fallback to direct nops table query
+      console.warn('View query failed, falling back to direct table:', viewError.message);
+      result = desaKode
+        ? await db.execute(sql`
+            SELECT ST_AsMVT(q, 'nops', 4096, 'geom') as mvt
+            FROM (
+              SELECT 
+                id, 
+                d_nop, 
+                d_luas, 
+                SUBSTRING(d_nop FROM 14 FOR 4) as view_nop,
+                ST_AsMVTGeom(
+                  ST_SimplifyPreserveTopology(ST_Transform(geom, 3857), ${simplifyTolerance}),
+                  ST_TileEnvelope(${zoom}, ${tileX}, ${tileY}),
+                  4096, 64, true
+                ) as geom
+              FROM nops
+              WHERE ST_Intersects(
+                ST_Transform(geom, 3857),
+                ST_TileEnvelope(${zoom}, ${tileX}, ${tileY})
+              )
+              AND left(d_nop, 10) = ${desaKode}
+            ) q
+            WHERE geom IS NOT NULL
+          `)
+        : await db.execute(sql`
+            SELECT ST_AsMVT(q, 'nops', 4096, 'geom') as mvt
+            FROM (
+              SELECT 
+                id, 
+                d_nop, 
+                d_luas, 
+                SUBSTRING(d_nop FROM 14 FOR 4) as view_nop,
+                ST_AsMVTGeom(
+                  ST_SimplifyPreserveTopology(ST_Transform(geom, 3857), ${simplifyTolerance}),
+                  ST_TileEnvelope(${zoom}, ${tileX}, ${tileY}),
+                  4096, 64, true
+                ) as geom
+              FROM nops
+              WHERE ST_Intersects(
+                ST_Transform(geom, 3857),
+                ST_TileEnvelope(${zoom}, ${tileX}, ${tileY})
+              )
+            ) q
+            WHERE geom IS NOT NULL
+          `);
+    }
 
     const mvt = result.rows[0]?.mvt as Buffer | null;
 
@@ -77,12 +128,12 @@ export async function GET(
       headers: {
         'Content-Type': 'application/x-protobuf',
         'Access-Control-Allow-Origin': '*',
-        // Cache tiles for 1 hour to speed up repeated loads
-        'Cache-Control': 'public, max-age=3600, stale-while-revalidate=300',
+        // Cache tiles for 7 days (604800s) - polygon data rarely changes
+        'Cache-Control': 'public, max-age=604800, stale-while-revalidate=86400',
       },
     });
   } catch (error: any) {
-    console.error('MVT Error:', error.message);
+    console.error('MVT Error:', error);
     return new NextResponse(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: {
@@ -92,3 +143,4 @@ export async function GET(
     });
   }
 }
+

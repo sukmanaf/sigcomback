@@ -74,6 +74,7 @@ export default function MapComponent({
 }: MapComponentProps) {
   const [selectedDesaKode, setSelectedDesaKode] = useState<string>();
   const [selectedDesaNama, setSelectedDesaNama] = useState<string>();
+  const [selectedDesaBounds, setSelectedDesaBounds] = useState<L.LatLngBounds | null>(null);
   // Initially no layers visible, desas will load after basemap is ready
   const [visibleLayers, setVisibleLayers] = useState<Set<string>>(new Set());
   const [basemapReady, setBasemapReady] = useState(false);
@@ -100,6 +101,7 @@ export default function MapComponent({
   const [showNopInfoModal, setShowNopInfoModal] = useState(false);
   const [showPolygonEditModal, setShowPolygonEditModal] = useState(false);
   const [infoNop, setInfoNop] = useState<string | null>(null);
+  const [infoTematikCategory, setInfoTematikCategory] = useState<string | null>(null);
   const [tematikCategories, setTematikCategories] = useState<string[]>([]);
   const [savedLayersBeforeTematik, setSavedLayersBeforeTematik] = useState<Set<string> | null>(null);
   const [blokRefreshKey, setBlokRefreshKey] = useState(0);
@@ -470,6 +472,7 @@ export default function MapComponent({
   }, []);
 
   // Auto-hide layers when tematik is active, restore when closed
+  // Also zoom to desa bounds when tematik is selected
   useEffect(() => {
     if (activeTematik) {
       // Save current visible layers before hiding
@@ -482,6 +485,15 @@ export default function MapComponent({
       newLayers.delete('bloks');
       newLayers.delete('bangunans');
       setVisibleLayers(newLayers);
+
+      // Zoom back to desa bounds when tematik is selected
+      if (selectedDesaBounds && mapRef.current) {
+        const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+        mapRef.current.fitBounds(selectedDesaBounds, {
+          padding: [30, 30],
+          maxZoom: isMobile ? 13 : 18
+        });
+      }
     } else {
       // Restore layers when tematik is closed
       if (savedLayersBeforeTematik !== null) {
@@ -492,7 +504,7 @@ export default function MapComponent({
       setTematikCategories([]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTematik]);
+  }, [activeTematik, tematikKey]);
 
   return (
     <div className="relative w-full h-full">
@@ -537,6 +549,16 @@ export default function MapComponent({
             setSelectedDesaKode(feature.properties.d_kd_kel);
             setSelectedDesaNama(feature.properties.d_nm_kel);
 
+            // Save desa bounds for later zoom reset
+            if (feature.geometry && mapRef.current) {
+              try {
+                const geoJsonLayer = L.geoJSON(feature);
+                setSelectedDesaBounds(geoJsonLayer.getBounds());
+              } catch (e) {
+                console.error('Error getting desa bounds:', e);
+              }
+            }
+
             // Notify parent of desa change
             if (onDesaChange) {
               onDesaChange(feature.properties.d_kd_kel);
@@ -579,14 +601,19 @@ export default function MapComponent({
           minZoom={18}
         />
 
-        {/* Tematik Layer - Color-coded NOP visualization */}
-        {activeTematik && selectedDesaKode && (
+        {/* Tematik Layer - Always render so cleanup runs properly */}
+        {selectedDesaKode && (
           <TematikLayer
-            key={`tematik-${activeTematik}-${tematikKey}`}
+            key={`tematik-layer-${tematikKey}`}
             desaKode={selectedDesaKode}
             tematik={activeTematik}
             visible={!!activeTematik}
             onCategoriesChange={setTematikCategories}
+            onNopClick={(nop, category) => {
+              setInfoNop(nop);
+              setInfoTematikCategory(category);
+              setShowNopInfoModal(true);
+            }}
           />
         )}
 
@@ -722,19 +749,33 @@ export default function MapComponent({
 
       {/* Tematik Legend - Bottom Left */}
       {activeTematik && tematikCategories.length > 0 && (
-        <div className="absolute bottom-4 left-4 z-[1000] bg-white rounded-xl shadow-lg border border-gray-200 p-4 landscape:p-2 max-w-xs max-h-48 landscape:max-h-32 overflow-y-auto">
-          <h4 className="text-sm landscape:text-xs font-semibold text-gray-800 mb-3 landscape:mb-2">Legenda</h4>
-          <div className="space-y-2 landscape:space-y-1">
+        <div className="absolute bottom-4 left-4 z-[1000] bg-white rounded-xl shadow-lg border border-gray-200 p-2 md:p-5 max-w-[150px] md:max-w-sm max-h-28 md:max-h-[30vh] md:min-h-[150px] overflow-y-auto">
+          <h4 className="text-xs md:text-base font-semibold text-gray-800 mb-2 md:mb-4">Legenda</h4>
+          <div className="space-y-1 md:space-y-3">
             {tematikCategories.map(category => (
-              <div key={category} className="flex items-center gap-2 landscape:gap-1">
+              <div
+                key={category}
+                className="flex items-center gap-1 md:gap-3 cursor-pointer hover:bg-gray-100 rounded p-0.5 -m-0.5 transition-colors"
+                onClick={() => {
+                  // Zoom back to desa bounds when clicking legend item
+                  if (selectedDesaBounds && mapRef.current) {
+                    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+                    mapRef.current.fitBounds(selectedDesaBounds, {
+                      padding: [30, 30],
+                      maxZoom: isMobile ? 13 : 18
+                    });
+                  }
+                }}
+                title="Klik untuk zoom ke desa"
+              >
                 <div
-                  className="w-4 h-4 landscape:w-3 landscape:h-3 rounded-sm shrink-0"
+                  className="w-3 h-3 md:w-5 md:h-5 rounded-sm shrink-0"
                   style={{
                     backgroundColor: getCategoryColor(category, activeTematik),
                     border: `2px solid ${getCategoryColor(category, activeTematik)}`
                   }}
                 />
-                <span className="text-xs landscape:text-[10px] text-gray-700">{category}</span>
+                <span className="text-[10px] md:text-sm text-gray-700">{category}</span>
               </div>
             ))}
           </div>
@@ -757,9 +798,11 @@ export default function MapComponent({
           onClose={() => {
             setShowNopInfoModal(false);
             setInfoNop(null);
+            setInfoTematikCategory(null);
           }}
           nop={infoNop}
           userRole={userRole}
+          tematikCategory={infoTematikCategory || undefined}
         />
       )}
 
