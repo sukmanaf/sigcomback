@@ -65,9 +65,16 @@ export default function SearchModal({
     // Handle click outside
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
-            if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
-                onClose();
+            // Don't close if clicking inside the modal
+            if (modalRef.current && modalRef.current.contains(e.target as Node)) {
+                return;
             }
+            // Don't close if clicking inside SweetAlert
+            const swalContainer = document.querySelector('.swal2-container');
+            if (swalContainer && swalContainer.contains(e.target as Node)) {
+                return;
+            }
+            onClose();
         };
         if (isOpen) {
             document.addEventListener('mousedown', handleClickOutside);
@@ -228,7 +235,7 @@ export default function SearchModal({
                 Swal.fire({
                     icon: 'warning',
                     title: 'Tidak Ditemukan',
-                    text: 'Polygon NOP tidak ditemukan dalam database peta',
+                    text: 'Data peta tidak ditemukan',
                     confirmButtonColor: '#10b981',
                 });
                 return;

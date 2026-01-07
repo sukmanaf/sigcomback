@@ -37,3 +37,8 @@ body {
 .leaflet-control-container {
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* SweetAlert2 z-index override to appear above modals */
+.swal2-container {
+  z-index: 10000 !important;
+}
