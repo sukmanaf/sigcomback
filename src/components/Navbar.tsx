@@ -10,6 +10,8 @@ import ChangePasswordModal from './ChangePasswordModal';
 interface NavbarProps {
   editMode?: boolean;
   onEditModeChange?: (editMode: boolean) => void;
+  multiEditMode?: boolean;
+  onMultiEditModeChange?: (multiEdit: boolean) => void;
   onTematikChange?: (tematik: string) => void;
   activeTematik?: string;
   desaKode?: string;
@@ -30,6 +32,8 @@ const tematikItems = [
 export default function Navbar({
   editMode = false,
   onEditModeChange,
+  multiEditMode = false,
+  onMultiEditModeChange,
   onTematikChange,
   activeTematik = '',
   desaKode = '',
@@ -313,15 +317,17 @@ export default function Navbar({
 
               {/* Edit Toggle for Mobile - Compact */}
               {pathname === '/map' && onEditModeChange && canEdit && (
-                <button
-                  onClick={() => onEditModeChange(!editMode)}
-                  className="p-2 text-emerald-100"
-                  title={editMode ? 'Disable Edit' : 'Enable Edit'}
-                >
-                  <div className={`relative w-10 h-5 rounded-full transition-colors ${editMode ? 'bg-amber-500' : 'bg-white/30'}`}>
-                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${editMode ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                  </div>
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => onEditModeChange(!editMode)}
+                    className="p-2 text-emerald-100"
+                    title={editMode ? 'Disable Edit' : 'Enable Edit'}
+                  >
+                    <div className={`relative w-10 h-5 rounded-full transition-colors ${editMode ? 'bg-amber-500' : 'bg-white/30'}`}>
+                      <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${editMode ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                    </div>
+                  </button>
+                </div>
               )}
             </div>
 

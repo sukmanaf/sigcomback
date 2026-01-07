@@ -1,6 +1,7 @@
 'use client';
 
-import { MapContainer, TileLayer, Popup, Marker, useMap, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Popup, Marker, useMap, useMapEvents, GeoJSON } from 'react-leaflet';
+import { Search } from 'lucide-react';
 
 // Component to log zoom level on zoom events
 function ZoomLogger() {
@@ -35,7 +36,9 @@ import SavePolygonModal, { SavePolygonData } from './SavePolygonModal';
 import NopInfoModal from './NopInfoModal';
 import PolygonEditModal, { PolygonEditData } from './PolygonEditModal';
 import PolygonEditLayer, { EditLayerType } from './PolygonEditLayer';
+import MultiPolygonEditLayer from './MultiPolygonEditLayer';
 import TematikLayer, { getCategoryColor, TEMATIK_FILL_OPACITY } from './TematikLayer';
+import SearchModal from './SearchModal';
 import { mapConfig } from '@/lib/mapConfig';
 import Swal from 'sweetalert2';
 
@@ -53,6 +56,7 @@ interface MapComponentProps {
   basemap: string;
   onBasemapChange: (basemap: string) => void;
   editMode?: boolean;
+  multiEditMode?: boolean;
   activeTematik?: string;
   tematikKey?: number;
   onDesaChange?: (desaKode: string) => void;
@@ -65,12 +69,13 @@ export default function MapComponent({
   basemap,
   onBasemapChange,
   editMode = false,
+  multiEditMode = false,
   activeTematik = '',
   tematikKey = 0,
   onDesaChange,
   onClearTematik,
   userKodeWilayah,
-  userRole
+  userRole,
 }: MapComponentProps) {
   const [selectedDesaKode, setSelectedDesaKode] = useState<string>();
   const [selectedDesaNama, setSelectedDesaNama] = useState<string>();
@@ -106,6 +111,17 @@ export default function MapComponent({
   const [savedLayersBeforeTematik, setSavedLayersBeforeTematik] = useState<Set<string> | null>(null);
   const [blokRefreshKey, setBlokRefreshKey] = useState(0);
   const [bangunanRefreshKey, setBangunanRefreshKey] = useState(0);
+
+  // Highlighted NOP from search - stores GeoJSON data for red highlight
+  const [highlightedNopData, setHighlightedNopData] = useState<any>(null);
+
+  // Internal search state (moved from Navbar/page.tsx)
+  const [showSearchModal, setShowSearchModal] = useState(false);
+  const [searchNop, setSearchNop] = useState<string | null>(null);
+  const [searchDesaKode, setSearchDesaKode] = useState<string | null>(null);
+
+  // Multi-edit state
+  const [selectedPolygonsForMultiEdit, setSelectedPolygonsForMultiEdit] = useState<Array<{ type: EditLayerType, id: string | number, code: string }>>([]);
 
   // Default layer styles
   const defaultLayerStyles: Record<string, LayerStyle> = {
@@ -285,31 +301,82 @@ export default function MapComponent({
   // Handle NOP click when in edit mode - enter polygon edit mode
   const handleNopClick = useCallback(async (nopCode: string, luas: string, latlng: L.LatLng) => {
     if (editMode) {
-      // In edit mode: start editing the polygon
-      setEditingType('nop');
-      setEditingId(nopCode);
+      if (multiEditMode) {
+        // Multi-edit mode: add/remove from selection
+        setSelectedPolygonsForMultiEdit(prev => {
+          const exists = prev.find(p => p.type === 'nop' && p.id === nopCode);
+          if (exists) {
+            // Remove from selection
+            return prev.filter(p => !(p.type === 'nop' && p.id === nopCode));
+          } else {
+            // Check if trying to mix types
+            if (prev.length > 0 && prev[0].type !== 'nop') {
+              alert('Mode multi hanya bisa untuk 1 tipe polygon (NOP/Blok/Bangunan)');
+              return prev;
+            }
+            // Add to selection
+            return [...prev, { type: 'nop', id: nopCode, code: nopCode }];
+          }
+        });
+      } else {
+        // Single edit mode: start editing the polygon
+        setEditingType('nop');
+        setEditingId(nopCode);
+      }
     } else {
       // Not in edit mode: show NOP info modal (modal will fetch from SISMIOP API)
       setInfoNop(nopCode);
       setShowNopInfoModal(true);
     }
-  }, [editMode]);
+  }, [editMode, multiEditMode]);
 
   // Handle Blok click when in edit mode
   const handleBlokClick = useCallback((id: number, code: string, latlng: L.LatLng) => {
     if (editMode) {
-      setEditingType('blok');
-      setEditingId(id);
+      if (multiEditMode) {
+        // Multi-edit mode: add/remove from selection
+        setSelectedPolygonsForMultiEdit(prev => {
+          const exists = prev.find(p => p.type === 'blok' && p.id === id);
+          if (exists) {
+            return prev.filter(p => !(p.type === 'blok' && p.id === id));
+          } else {
+            if (prev.length > 0 && prev[0].type !== 'blok') {
+              alert('Mode multi hanya bisa untuk 1 tipe polygon (NOP/Blok/Bangunan)');
+              return prev;
+            }
+            return [...prev, { type: 'blok', id, code }];
+          }
+        });
+      } else {
+        setEditingType('blok');
+        setEditingId(id);
+      }
     }
-  }, [editMode]);
+  }, [editMode, multiEditMode]);
 
   // Handle Bangunan click when in edit mode
   const handleBangunanClick = useCallback((id: number, code: string, latlng: L.LatLng) => {
     if (editMode) {
-      setEditingType('bangunan');
-      setEditingId(id);
+      if (multiEditMode) {
+        // Multi-edit mode: add/remove from selection
+        setSelectedPolygonsForMultiEdit(prev => {
+          const exists = prev.find(p => p.type === 'bangunan' && p.id === id);
+          if (exists) {
+            return prev.filter(p => !(p.type === 'bangunan' && p.id === id));
+          } else {
+            if (prev.length > 0 && prev[0].type !== 'bangunan') {
+              alert('Mode multi hanya bisa untuk 1 tipe polygon (NOP/Blok/Bangunan)');
+              return prev;
+            }
+            return [...prev, { type: 'bangunan', id, code }];
+          }
+        });
+      } else {
+        setEditingType('bangunan');
+        setEditingId(id);
+      }
     }
-  }, [editMode]);
+  }, [editMode, multiEditMode]);
 
   // Handle save button click from PolygonEditLayer
   const handlePolygonEditSaveClick = useCallback((type: EditLayerType, id: string | number, coordinates: number[][], code: string, existingImages?: string[]) => {
@@ -462,6 +529,82 @@ export default function MapComponent({
     }
   }, []);
 
+  // Handle batch save for multi-polygon edit
+  const handleBatchSave = useCallback(async (updates: Array<{ type: EditLayerType; id: string | number; code: string; coordinates: number[][] }>) => {
+    try {
+      const type = updates[0]?.type;
+      let successCount = 0;
+
+      for (const update of updates) {
+        try {
+          if (update.type === 'nop') {
+            const formData = new FormData();
+            formData.append('nop', update.code);
+            formData.append('coordinates', JSON.stringify(update.coordinates));
+
+            const response = await fetch('/api/nops/update', {
+              method: 'PUT',
+              body: formData,
+            });
+            const result = await response.json();
+            if (result.success) successCount++;
+          } else {
+            const apiUrl = update.type === 'blok' ? '/api/bloks/update' : '/api/bangunans/update';
+            const body = {
+              id: update.id,
+              coordinates: update.coordinates,
+              ...(update.type === 'blok' ? { d_blok: update.code } : { d_nop: update.code }),
+            };
+
+            const response = await fetch(apiUrl, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body),
+            });
+            const result = await response.json();
+            if (result.success) successCount++;
+          }
+        } catch (error) {
+          console.error(`Error saving ${update.type} ${update.id}:`, error);
+        }
+      }
+
+      // Clear selection
+      setSelectedPolygonsForMultiEdit([]);
+
+      // Refresh layer
+      if (type === 'nop') {
+        setNopRefreshKey(prev => prev + 1);
+      } else if (type === 'blok') {
+        setBlokRefreshKey(prev => prev + 1);
+      } else {
+        setBangunanRefreshKey(prev => prev + 1);
+      }
+
+      // Show success message
+      const typeLabel = type === 'nop' ? 'NOP' : type === 'blok' ? 'Blok' : 'Bangunan';
+      Swal.fire({
+        icon: 'success',
+        title: 'Berhasil!',
+        text: `${successCount}/${updates.length} ${typeLabel} berhasil disimpan`,
+        timer: 2000,
+        showConfirmButton: false,
+      });
+    } catch (error: any) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Gagal!',
+        text: error.message || 'Terjadi kesalahan saat menyimpan',
+      });
+      throw error;
+    }
+  }, []);
+
+  // Handle cancel multi-edit
+  const handleCancelMultiEdit = useCallback(() => {
+    setSelectedPolygonsForMultiEdit([]);
+  }, []);
+
   // Force clear Leaflet cache on mount
   useEffect(() => {
     // Clear localStorage yang mungkin menyimpan map state
@@ -505,6 +648,92 @@ export default function MapComponent({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTematik, tematikKey]);
+
+  // Handle search result - navigate to desa, show NOP polygon, and open info modal
+  useEffect(() => {
+    if (!searchNop || !searchDesaKode || !mapRef.current) return;
+
+    const handleSearch = async () => {
+      try {
+        // First, show desas layer and reset to desas view
+        const newLayers = new Set(['desas']);
+        setVisibleLayers(newLayers);
+
+        // Fetch desas to find the target one  
+        const url = `/api/desas/all?desa=${searchDesaKode}`;
+        const response = await fetch(url);
+        const geojson = await response.json();
+
+        if (geojson.features && geojson.features.length > 0) {
+          const targetFeature = geojson.features[0];
+          const props = targetFeature.properties;
+
+          // Create GeoJSON layer to get bounds
+          const geoJsonLayer = L.geoJSON(targetFeature);
+          const bounds = geoJsonLayer.getBounds();
+
+          // Set selected desa
+          setSelectedDesaKode(props.d_kd_kel);
+          setSelectedDesaNama(props.d_nm_kel);
+          setSelectedDesaBounds(bounds);
+
+          // Notify parent
+          if (onDesaChange) {
+            onDesaChange(props.d_kd_kel);
+          }
+
+          // Hide desa layer, show NOP layer
+          const nopLayers = new Set(['nops']);
+          setVisibleLayers(nopLayers);
+
+          // Zoom to desa first
+          const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+          mapRef.current?.fitBounds(bounds, {
+            padding: [30, 30],
+            maxZoom: isMobile ? 13 : 18
+          });
+
+          // Now fetch the specific NOP polygon
+          const nopResponse = await fetch(`/api/nops/${searchNop}`);
+          const nopData = await nopResponse.json();
+
+          if (nopData.success && nopData.data && nopData.data.geometry) {
+            // Create GeoJSON layer for NOP to get bounds
+            const nopGeoJson = L.geoJSON(nopData.data);
+            const nopBounds = nopGeoJson.getBounds();
+
+            // Zoom to NOP polygon and highlight it with red color
+            setTimeout(() => {
+              mapRef.current?.fitBounds(nopBounds, {
+                padding: [50, 50],
+                maxZoom: 21
+              });
+
+              // Set highlighted NOP data for red highlight effect
+              setHighlightedNopData(nopData.data);
+            }, 500);
+          } else {
+            // NOP polygon not found in local database, show info modal for SISMIOP data
+            setInfoNop(searchNop);
+            setShowNopInfoModal(true);
+          }
+        }
+
+        // Clear internal search state
+        setSearchNop(null);
+        setSearchDesaKode(null);
+
+      } catch (error) {
+        console.error('Error handling search:', error);
+        // Clear internal search state on error
+        setSearchNop(null);
+        setSearchDesaKode(null);
+      }
+    };
+
+    handleSearch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchNop, searchDesaKode]);
 
   return (
     <div className="relative w-full h-full">
@@ -567,6 +796,7 @@ export default function MapComponent({
         />
 
         {/* MVT Tile Layer for NOP - Binary vector tiles (hidden when tematik active) */}
+        {/* Keep visible during multi-edit mode so user can click more polygons to add to selection */}
         <MVTTileLayer
           key={`nops-${nopRefreshKey}`}
           url="/api/tiles/nops/mvt"
@@ -576,11 +806,38 @@ export default function MapComponent({
           opacity={1}
           fillOpacity={layerStyles.nops?.opacity || 0.15}
           desaKode={selectedDesaKode}
-          visible={visibleLayers.has('nops') && !editingType && !activeTematik}
+          visible={visibleLayers.has('nops') && !activeTematik}
           editMode={editMode}
           onNopClick={handleNopClick}
           refreshKey={nopRefreshKey}
         />
+
+        {/* Highlighted NOP from Search - Red highlight polygon */}
+        {highlightedNopData && (
+          <GeoJSON
+            key={`highlight-${highlightedNopData.properties?.d_nop || 'nop'}`}
+            data={highlightedNopData}
+            style={{
+              color: '#ff0000',
+              weight: 4,
+              opacity: 1,
+              fillColor: '#ff0000',
+              fillOpacity: 0.3,
+            }}
+            eventHandlers={{
+              click: () => {
+                // Open NOP info modal when clicking the highlighted polygon
+                const nop = highlightedNopData.properties?.d_nop;
+                if (nop) {
+                  setInfoNop(nop);
+                  setShowNopInfoModal(true);
+                }
+                // Clear highlight after click
+                setHighlightedNopData(null);
+              },
+            }}
+          />
+        )}
 
         {/* Polygon Edit Layer - Shown when editing a specific polygon */}
         {editingType && editingId && (
@@ -594,10 +851,21 @@ export default function MapComponent({
           />
         )}
 
+        {/* Multi-Polygon Edit Layer - Shown when in multi-edit mode with selections */}
+        {multiEditMode && selectedPolygonsForMultiEdit.length > 0 && (
+          <MultiPolygonEditLayer
+            selectedPolygons={selectedPolygonsForMultiEdit}
+            visible={multiEditMode && selectedPolygonsForMultiEdit.length > 0}
+            onSaveAll={handleBatchSave}
+            onCancel={handleCancelMultiEdit}
+          />
+        )}
+
         {/* Canvas-based NOP Labels Layer (much lighter than marker-based) */}
+        {/* Keep labels visible even during edit mode so user can see NOP numbers */}
         <NopLabelsCanvasLayer
           desaKode={selectedDesaKode}
-          visible={visibleLayers.has('nops') && !editingType && !activeTematik}
+          visible={visibleLayers.has('nops') && !activeTematik}
           minZoom={18}
         />
 
@@ -621,7 +889,7 @@ export default function MapComponent({
         <BlokFullLayer
           key={`bloks-${blokRefreshKey}`}
           desaKode={selectedDesaKode}
-          visible={visibleLayers.has('bloks') && !editingType}
+          visible={visibleLayers.has('bloks') && !(multiEditMode && selectedPolygonsForMultiEdit.length > 0)}
           color={layerStyles.bloks?.color || '#FF00FF'}
           weight={2}
           opacity={1}
@@ -641,7 +909,7 @@ export default function MapComponent({
           opacity={1}
           fillOpacity={layerStyles.bangunans?.opacity || 0.3}
           desaKode={selectedDesaKode}
-          visible={visibleLayers.has('bangunans') && !editingType}
+          visible={visibleLayers.has('bangunans') && !(multiEditMode && selectedPolygonsForMultiEdit.length > 0)}
           editMode={editMode}
           onFeatureClick={handleBangunanClick}
           refreshKey={bangunanRefreshKey}
@@ -710,6 +978,23 @@ export default function MapComponent({
           )}
         </div>
       )}
+
+      {/* Search Button - Top Right, next to Layer Panel */}
+      <div className="absolute top-4 landscape:top-2 right-16 z-[1000]">
+        <button
+          onClick={() => {
+            // Clear tematik before opening search
+            if (onClearTematik) {
+              onClearTematik();
+            }
+            setShowSearchModal(true);
+          }}
+          className="bg-white hover:bg-gray-50 text-emerald-600 rounded-lg p-3 landscape:p-2 shadow-lg transition-colors border border-gray-300"
+          title="Pencarian Objek Pajak"
+        >
+          <Search size={24} className="landscape:w-5 landscape:h-5" />
+        </button>
+      </div>
 
       {/* Layer Panel - Top Right */}
       <LayerPanel
@@ -824,6 +1109,23 @@ export default function MapComponent({
           existingImages={editPolygonImages}
         />
       )}
+
+      {/* Search Modal */}
+      <SearchModal
+        isOpen={showSearchModal}
+        onClose={() => setShowSearchModal(false)}
+        onSearchResult={(nop, desaKode) => {
+          // Clear active tematik before searching
+          if (onClearTematik) {
+            onClearTematik();
+          }
+          // Set search state to trigger navigation
+          setSearchNop(nop);
+          setSearchDesaKode(desaKode);
+        }}
+        userRole={userRole}
+        userKodeWilayah={userKodeWilayah}
+      />
     </div>
   );
 }

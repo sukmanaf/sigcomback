@@ -31,6 +31,7 @@ export default function MapPage() {
   const { user, loading, canEdit } = useAuth();
   const [basemap, setBasemap] = useState('osm');
   const [editMode, setEditMode] = useState(false);
+  const [multiEditMode, setMultiEditMode] = useState(false);
   const [activeTematik, setActiveTematik] = useState('');
   const [tematikKey, setTematikKey] = useState(0);
   const [desaKode, setDesaKode] = useState('');
@@ -52,6 +53,11 @@ export default function MapPage() {
     }
   };
 
+  // Handler to clear tematik
+  const handleClearTematik = () => {
+    setActiveTematik('');
+  };
+
   // Show loading while checking auth
   if (loading) {
     return (
@@ -69,16 +75,13 @@ export default function MapPage() {
     return null;
   }
 
-  // Handler to clear tematik
-  const handleClearTematik = () => {
-    setActiveTematik('');
-  };
-
   return (
     <div className="flex flex-col h-screen w-screen bg-white">
       <Navbar
         editMode={editMode}
         onEditModeChange={canEdit ? setEditMode : undefined}
+        multiEditMode={multiEditMode}
+        onMultiEditModeChange={canEdit ? setMultiEditMode : undefined}
         onTematikChange={handleTematikChange}
         activeTematik={activeTematik}
         desaKode={desaKode}
@@ -88,6 +91,7 @@ export default function MapPage() {
           basemap={basemap}
           onBasemapChange={setBasemap}
           editMode={canEdit ? editMode : false}
+          multiEditMode={multiEditMode}
           activeTematik={activeTematik}
           tematikKey={tematikKey}
           onDesaChange={setDesaKode}
@@ -99,4 +103,3 @@ export default function MapPage() {
     </div>
   );
 }
-

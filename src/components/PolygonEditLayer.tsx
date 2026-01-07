@@ -5,6 +5,7 @@ import { useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet-draw';
 import 'leaflet-draw/dist/leaflet.draw.css';
+import 'leaflet-path-drag';
 
 export type EditLayerType = 'nop' | 'blok' | 'bangunan';
 
@@ -122,7 +123,8 @@ export default function PolygonEditLayer({
             weight: 3,
             fillOpacity: 0.3,
             fillColor: color,
-        });
+            draggable: true, // Enable drag to move entire polygon
+        } as any);
 
         polygon.addTo(map);
         polygonRef.current = polygon;
@@ -133,6 +135,16 @@ export default function PolygonEditLayer({
         // Enable editing immediately (leaflet-draw adds editing to polygon)
         (polygon as any).editing?.enable();
         setIsEditing(true);
+
+        // Handle drag events - disable/re-enable editing after drag
+        // This fixes the issue where edit handles don't sync after drag
+        polygon.on('dragstart', () => {
+            (polygon as any).editing?.disable();
+        });
+
+        polygon.on('dragend', () => {
+            (polygon as any).editing?.enable();
+        });
 
         return () => {
             if (polygonRef.current) {

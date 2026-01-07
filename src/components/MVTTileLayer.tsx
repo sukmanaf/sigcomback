@@ -66,9 +66,15 @@ export default function MVTTileLayer({
   useEffect(() => {
     if (!map) return;
 
-    // Cleanup existing layer
+    // Cleanup existing layer - clear cache more aggressively
     if (layerRef.current) {
-      map.removeLayer(layerRef.current);
+      try {
+        // Force redraw to clear any cached tiles
+        layerRef.current.redraw();
+      } catch (e) { /* ignore */ }
+      try {
+        map.removeLayer(layerRef.current);
+      } catch (e) { /* ignore */ }
       layerRef.current = null;
     }
 
@@ -85,8 +91,10 @@ export default function MVTTileLayer({
         return;
       }
 
-      // Build tile URL with cache-busting parameter
-      const tileUrl = `${url}/{z}/{x}/{y}?desaKode=${desaKode}&_t=${refreshKey}`;
+      // Build tile URL with cache-busting parameter using both refreshKey and timestamp
+      // This ensures browser fetches fresh tiles after polygon edits
+      const cacheKey = `${refreshKey}_${Date.now()}`;
+      const tileUrl = `${url}/{z}/{x}/{y}?desaKode=${desaKode}&_t=${cacheKey}`;
 
       const layer = vectorGrid.protobuf(tileUrl, {
         vectorTileLayerStyles: vectorTileStyle,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { X, Upload, Trash2 } from 'lucide-react';
 
 interface SavePolygonModalProps {
@@ -31,6 +31,16 @@ export default function SavePolygonModal({
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Pre-fill NOP with kd_desa when modal opens or defaultDesaKode changes
+    useEffect(() => {
+        if (isOpen) {
+            setNop(defaultDesaKode);
+            setType('nop');
+            setFiles([]);
+            setError(null);
+        }
+    }, [isOpen, defaultDesaKode]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedFiles = Array.from(e.target.files || []);
