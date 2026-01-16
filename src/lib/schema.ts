@@ -90,3 +90,14 @@ export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Usulan = typeof usulan.$inferSelect;
 export type NewUsulan = typeof usulan.$inferInsert;
+
+// App Settings table
+export const appSettings = pgTable('app_settings', {
+  id: serial('id').primaryKey(),
+  key: varchar('key', { length: 100 }).notNull().unique(),
+  value: varchar('value', { length: 500 }),
+  updated_at: timestamp('updated_at').defaultNow(),
+});
+
+export type AppSetting = typeof appSettings.$inferSelect;
+export type NewAppSetting = typeof appSettings.$inferInsert;

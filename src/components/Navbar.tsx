@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Pencil, Layers, ChevronDown, LogOut, Users, Key, User, Menu, X, MessageSquarePlus } from 'lucide-react';
+import { Pencil, Layers, ChevronDown, LogOut, Users, Key, User, Menu, X, MessageSquarePlus, Settings } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import ChangePasswordModal from './ChangePasswordModal';
@@ -44,6 +44,8 @@ export default function Navbar({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [isLandscape, setIsLandscape] = useState(false);
+  const [appName, setAppName] = useState('SmartMap');
+  const [appLogo, setAppLogo] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
@@ -58,6 +60,23 @@ export default function Navbar({
     checkOrientation();
     window.addEventListener('resize', checkOrientation);
     return () => window.removeEventListener('resize', checkOrientation);
+  }, []);
+
+  // Fetch app settings
+  useEffect(() => {
+    async function fetchSettings() {
+      try {
+        const res = await fetch('/api/settings');
+        const data = await res.json();
+        if (data.success) {
+          if (data.data.app_name) setAppName(data.data.app_name);
+          if (data.data.app_logo) setAppLogo(data.data.app_logo);
+        }
+      } catch (error) {
+        console.error('Failed to fetch app settings:', error);
+      }
+    }
+    fetchSettings();
   }, []);
 
   const menuItems = [
@@ -112,12 +131,16 @@ export default function Navbar({
   return (
     <>
       <nav className="bg-emerald-600 text-white shadow-lg relative">
-        <div className="max-w-full px-4 py-3 landscape:py-1">
+        <div className="max-w-full px-3 py-2 md:px-4 md:py-3 landscape:py-1">
           <div className="flex items-center justify-between">
             {/* Logo */}
-            <Link href="/" className="flex items-center gap-2 text-xl md:text-2xl font-bold">
-              <span className="text-2xl md:text-3xl">🌍</span>
-              <span className="hidden sm:inline">SmartMap</span>
+            <Link href="/" className="flex items-center gap-1.5 md:gap-2 text-lg md:text-2xl font-bold">
+              {appLogo ? (
+                <img src={appLogo} alt={appName} className="h-6 w-6 md:h-10 md:w-10 object-contain rounded" />
+              ) : (
+                <span className="text-xl md:text-3xl">🌍</span>
+              )}
+              <span className="hidden sm:inline">{appName}</span>
             </Link>
 
             {/* Desktop Menu */}
@@ -239,6 +262,16 @@ export default function Navbar({
                           <div className="font-semibold text-white">{user.name}</div>
                           <div className="text-gray-400 text-xs capitalize">{user.role}</div>
                         </div>
+                        {canManageUsers && (
+                          <Link
+                            href="/settings"
+                            onClick={() => setUserMenuOpen(false)}
+                            className="w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center gap-3 text-gray-300 hover:bg-slate-700 hover:text-white"
+                          >
+                            <Settings size={16} />
+                            <span>Pengaturan</span>
+                          </Link>
+                        )}
                         <button
                           onClick={handleChangePasswordClick}
                           className="w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center gap-3 text-gray-300 hover:bg-slate-700 hover:text-white"
@@ -405,6 +438,19 @@ export default function Navbar({
 
                     {/* Account Actions */}
                     <div className="pt-2 border-t border-emerald-600 space-y-1">
+                      {canManageUsers && (
+                        <Link
+                          href="/settings"
+                          onClick={() => setMobileMenuOpen(false)}
+                          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg ${pathname === '/settings'
+                            ? 'bg-emerald-800 text-white'
+                            : 'text-emerald-100 hover:bg-emerald-600'
+                            }`}
+                        >
+                          <Settings size={18} />
+                          <span>Pengaturan</span>
+                        </Link>
+                      )}
                       <button
                         onClick={handleChangePasswordClick}
                         className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-emerald-100 hover:bg-emerald-600"

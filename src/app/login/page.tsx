@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Swal from 'sweetalert2';
 
@@ -9,6 +9,29 @@ export default function LoginPage() {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const [appNameShort, setAppNameShort] = useState('SmartMap');
+    const [appName, setAppName] = useState('');
+    const [appLogo, setAppLogo] = useState<string | null>(null);
+    const [institutionName, setInstitutionName] = useState('');
+
+    // Fetch app settings
+    useEffect(() => {
+        async function fetchSettings() {
+            try {
+                const res = await fetch('/api/settings');
+                const data = await res.json();
+                if (data.success) {
+                    if (data.data.app_name_short) setAppNameShort(data.data.app_name_short);
+                    if (data.data.app_name) setAppName(data.data.app_name);
+                    if (data.data.app_logo) setAppLogo(data.data.app_logo);
+                    if (data.data.institution_name) setInstitutionName(data.data.institution_name);
+                }
+            } catch (error) {
+                console.error('Failed to fetch app settings:', error);
+            }
+        }
+        fetchSettings();
+    }, []);
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
@@ -55,20 +78,28 @@ export default function LoginPage() {
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-500 to-teal-600">
             <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md">
                 {/* Logo */}
-                <div className="flex justify-center mb-6">
-                    <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-emerald-500 rounded-full flex items-center justify-center">
-                            <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="flex flex-col items-center mb-6">
+                    {/* Logo di atas */}
+                    {appLogo ? (
+                        <img src={appLogo} alt={appNameShort} className="w-20 h-20 object-contain rounded mb-3" />
+                    ) : (
+                        <div className="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center mb-3">
+                            <svg className="w-9 h-9 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                         </div>
-                        <span className="text-2xl font-bold text-gray-800">SmartMap</span>
-                    </div>
+                    )}
+                    {/* Nama Singkatan */}
+                    <h1 className="text-2xl font-bold text-gray-800 text-center">{appNameShort}</h1>
+                    {/* Nama Lengkap */}
+                    {appName && (
+                        <p className="text-sm text-gray-600 text-center max-w-xs mt-1">{appName}</p>
+                    )}
                 </div>
 
-                <h2 className="text-xl font-semibold text-center text-gray-700 mb-6">
+                {/*<h2 className="text-xl font-semibold text-center text-gray-700 mb-6">
                     Login ke Sistem
-                </h2>
+                </h2> */}
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
@@ -123,7 +154,7 @@ export default function LoginPage() {
                 </form>
 
                 <p className="mt-6 text-center text-sm text-gray-500">
-                    BAPENDA Kota Pasuruan © 2024
+                    {institutionName || 'BAPENDA'} © {new Date().getFullYear()}
                 </p>
             </div>
         </div>

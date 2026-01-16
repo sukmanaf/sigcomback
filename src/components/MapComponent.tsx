@@ -980,7 +980,7 @@ export default function MapComponent({
       )}
 
       {/* Search Button - Top Right, next to Layer Panel */}
-      <div className="absolute top-4 landscape:top-2 right-16 z-[1000]">
+      <div className="absolute top-4 landscape:top-2 right-16 z-[1000] pr-2">
         <button
           onClick={() => {
             // Clear tematik before opening search
